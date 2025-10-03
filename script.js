@@ -147,9 +147,10 @@ function updateTotal() {
 function useManualWeight() {
   const manual = parseFloat(document.getElementById("manual-weight").value);
   if (!isNaN(manual) && manual > 0) {
-    currentWeight = manual;
+    currentWeight += manual;
     document.getElementById("weight-display").innerText =
-      `Weight: ${manual.toFixed(1)} Kg (manual)`;
+      `Weight: ${currentWeight.toFixed(1)} Kg (accumulated)`;
+    document.getElementById("manual-weight").value = "";
     updateTotal();
   } else alert("Enter valid weight");
 }
@@ -181,17 +182,22 @@ async function connectScale() {
   }
 }
 
+let lastScaleWeight = 0;
+
 function handleScaleData(event) {
   const text = new TextDecoder().decode(event.target.value);
   const match = text.match(/(\d+\.\d+)/);
   if (match) {
     const parsed = parseFloat(match[1]);
-    if (!isNaN(parsed) && Math.abs(parsed - currentWeight) > 0.05) {
-      currentWeight = parsed;
-      document.getElementById("manual-weight").value = parsed.toFixed(1);
-      document.getElementById("weight-display").innerText =
-        `Weight: ${parsed.toFixed(1)} Kg (scale: ${scaleType})`;
-      updateTotal();
+    if (!isNaN(parsed) && parsed > 0 && Math.abs(parsed - lastScaleWeight) > 0.05) {
+      const weightDiff = parsed - lastScaleWeight;
+      if (weightDiff > 0) {
+        currentWeight += weightDiff;
+        lastScaleWeight = parsed;
+        document.getElementById("weight-display").innerText =
+          `Weight: ${currentWeight.toFixed(1)} Kg (accumulated from scale: ${scaleType})`;
+        updateTotal();
+      }
     }
   }
 }
@@ -240,6 +246,16 @@ async function saveMilk() {
   }
 
   updateReceiptModal(milkData);
+
+  currentWeight = 0;
+  lastScaleWeight = 0;
+  document.getElementById("farmer-id").value = "";
+  document.getElementById("route").value = "";
+  document.getElementById("section").value = "";
+  document.getElementById("farmer-name").innerText = "";
+  document.getElementById("weight-display").innerText = "Weight: 0 Kg";
+  document.getElementById("manual-weight").value = "";
+  updateTotal();
 }
 
 // --- Sync Pending Milk Collections ---
