@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Milk Collection App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-screen" class="screen">
+    <div class="card">
+      <h2>🥛 Milk Collection</h2>
+      <input type="text" id="userid" placeholder="User ID">
+      <input type="password" id="password" placeholder="Password">
+      <button onclick="login()" class="btn-primary">Login</button>
+    </div>
+  </div>
+
+  <!-- App Screen -->
+  <div id="app-screen" class="screen" style="display:none;">
+    <!-- Header -->
+    <header>
+      <button id="menu-btn" class="menu-btn">☰</button>
+      <h1>Milk Collection</h1>
+      <button onclick="logout()" class="btn-logout">Logout</button>
+    </header>
+
+    <!-- Sidebar Menu -->
+    <nav id="sidebar" class="sidebar">
+      <button class="close-btn" onclick="toggleMenu()">✕</button>
+      <a href="#farmer-card" onclick="toggleMenu()">👤 Farmer</a>
+      <a href="#weight-card" onclick="toggleMenu()">⚖️ Weight</a>
+      <a href="#receipts-card" onclick="toggleMenu()">📋 Receipts</a>
+    </nav>
+
+    <div class="container">
+      <div id="user-info" class="user-info"></div>
+
+      <!-- Farmer Card -->
+      <div id="farmer-card" class="card">
+        <h3>👤 Farmer Details</h3>
+        <input type="text" id="farmer-id" placeholder="Farmer ID">
+        <input type="text" id="route" placeholder="Route" readonly>
+        <select id="section">
+          <option value="">Select Section</option>
+          <option value="Morning">Morning</option>
+          <option value="Evening">Evening</option>
+        </select>
+        <p id="farmer-name" class="info-text"></p>
+      </div>
+
+      <!-- Weight Card -->
+      <div id="weight-card" class="card">
+        <h3>⚖️ Milk Weight</h3>
+        <div class="weight-section">
+          <p id="weight-display" class="weight-display">Weight: 0 Kg</p>
+          <button onclick="connectScale()" class="btn-secondary">Connect Scale</button>
+          <p id="scale-status" class="scale-status">Scale: Not Connected</p>
+        </div>
+        <div class="manual-weight">
+          <input type="number" id="manual-weight" placeholder="Manual Weight (Kg)" step="0.1">
+          <button onclick="useManualWeight()" class="btn-secondary">Use Manual</button>
+        </div>
+        <input type="number" id="price-per-liter" placeholder="Price per Liter (Ksh)" step="0.01" value="50">
+        <p id="total-amount" class="total-amount">Total: 0 Ksh</p>
+        <button onclick="saveMilk()" class="btn-primary">Save Collection</button>
+      </div>
+
+      <!-- Receipts Card -->
+      <div id="receipts-card" class="card">
+        <h3>📋 Pending Receipts</h3>
+        <ul id="pending-list" class="pending-list"></ul>
+        <button onclick="syncPendingMilk()" class="btn-secondary">Sync Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt Modal -->
+  <div id="modal-backdrop" class="modal-backdrop"></div>
+  <div id="receipt-modal" class="receipt-modal hidden">
+    <div class="receipt-content">
+      <h2>🧾 Receipt</h2>
+      <table id="receipt-items"></table>
+      <div class="receipt-footer">
+        <p>Subtotal: <span id="receipt-subtotal">0</span></p>
+        <p><strong>Total: <span id="receipt-total">0</span></strong></p>
+      </div>
+      <div class="modal-actions">
+        <button id="print-receipt-btn" class="btn-primary">Print</button>
+        <button id="close-receipt-btn" class="btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+  <script>
+    document.getElementById('menu-btn').addEventListener('click', toggleMenu);
+    function toggleMenu() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+  </script>
+</body>
+</html>
