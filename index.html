@@ -3,9 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Offline-capable milk collection management system">
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Milk Collect">
   <title>Milk Collection App</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
 </head>
 <body>
   <!-- Login Screen -->
@@ -95,11 +101,20 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/script.js"></script>
+  <script src="script.js"></script>
   <script>
     document.getElementById('menu-btn').addEventListener('click', toggleMenu);
     function toggleMenu() {
       document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('Service Worker registered ✅'))
+          .catch(err => console.error('Service Worker registration failed:', err));
+      });
     }
   </script>
 </body>

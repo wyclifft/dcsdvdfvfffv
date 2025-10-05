@@ -147,10 +147,9 @@ function updateTotal() {
 function useManualWeight() {
   const manual = parseFloat(document.getElementById("manual-weight").value);
   if (!isNaN(manual) && manual > 0) {
-    currentWeight += manual;
+    currentWeight = manual;
     document.getElementById("weight-display").innerText =
-      `Weight: ${currentWeight.toFixed(1)} Kg (accumulated)`;
-    document.getElementById("manual-weight").value = "";
+      `Weight: ${manual.toFixed(1)} Kg (manual)`;
     updateTotal();
   } else alert("Enter valid weight");
 }
@@ -162,87 +161,36 @@ async function connectScale() {
   try {
     scaleDevice = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: [
-        0xFFE0, 0xFEE7, 0x1810, 0x181D, 0xFFF0,
-        '0000ffe0-0000-1000-8000-00805f9b34fb',
-        '0000fee7-0000-1000-8000-00805f9b34fb',
-        '00001810-0000-1000-8000-00805f9b34fb',
-        '0000181d-0000-1000-8000-00805f9b34fb',
-        '0000fff0-0000-1000-8000-00805f9b34fb'
-      ]
+      optionalServices: [0xFFE0, 0xFEE7]
     });
 
     const server = await scaleDevice.gatt.connect();
-    scaleType = scaleDevice.name || "Generic Scale";
+    let service;
+    try { service = await server.getPrimaryService(0xFFE0); scaleType="HC-05"; }
+    catch { service = await server.getPrimaryService(0xFEE7); scaleType="HM-10"; }
 
-    const services = await server.getPrimaryServices();
-    let foundCharacteristic = false;
+    const characteristics = await service.getCharacteristics();
+    scaleCharacteristic = characteristics[0];
+    scaleCharacteristic.addEventListener("characteristicvaluechanged", handleScaleData);
+    await scaleCharacteristic.startNotifications();
 
-    for (const service of services) {
-      try {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.notify || char.properties.indicate) {
-            scaleCharacteristic = char;
-            scaleCharacteristic.addEventListener("characteristicvaluechanged", handleScaleData);
-            await scaleCharacteristic.startNotifications();
-            foundCharacteristic = true;
-            break;
-          }
-        }
-        if (foundCharacteristic) break;
-      } catch (e) { continue; }
-    }
-
-    if (foundCharacteristic) {
-      document.getElementById("scale-status").textContent = `Scale: Connected (${scaleType}) ✅`;
-    } else {
-      document.getElementById("scale-status").textContent = "Scale: No readable characteristic found";
-    }
+    document.getElementById("scale-status").textContent = `Scale: Connected (${scaleType}) ✅`;
   } catch (err) {
     console.error(err);
     document.getElementById("scale-status").textContent = "Scale: Error / Not Connected";
   }
 }
 
-let lastScaleWeight = 0;
-
 function handleScaleData(event) {
-  const value = event.target.value;
-  let parsed = null;
-
-  const text = new TextDecoder().decode(value);
-  const textMatch = text.match(/(\d+\.?\d*)/);
-  if (textMatch) {
-    parsed = parseFloat(textMatch[1]);
-  }
-
-  if (!parsed && value.byteLength >= 2) {
-    const dataView = new DataView(value.buffer);
-    try {
-      if (value.byteLength === 2) {
-        parsed = dataView.getUint16(0, true) / 100;
-      } else if (value.byteLength === 4) {
-        parsed = dataView.getFloat32(0, true);
-      } else if (value.byteLength >= 6) {
-        for (let i = 0; i < value.byteLength - 1; i++) {
-          const weight = dataView.getUint16(i, true);
-          if (weight > 0 && weight < 50000) {
-            parsed = weight / 100;
-            break;
-          }
-        }
-      }
-    } catch (e) { }
-  }
-
-  if (parsed && !isNaN(parsed) && parsed > 0 && parsed < 1000 && Math.abs(parsed - lastScaleWeight) > 0.05) {
-    const weightDiff = parsed - lastScaleWeight;
-    if (weightDiff > 0) {
-      currentWeight += weightDiff;
-      lastScaleWeight = parsed;
+  const text = new TextDecoder().decode(event.target.value);
+  const match = text.match(/(\d+\.\d+)/);
+  if (match) {
+    const parsed = parseFloat(match[1]);
+    if (!isNaN(parsed) && Math.abs(parsed - currentWeight) > 0.05) {
+      currentWeight = parsed;
+      document.getElementById("manual-weight").value = parsed.toFixed(1);
       document.getElementById("weight-display").innerText =
-        `Weight: ${currentWeight.toFixed(1)} Kg (accumulated from scale: ${scaleType})`;
+        `Weight: ${parsed.toFixed(1)} Kg (scale: ${scaleType})`;
       updateTotal();
     }
   }
@@ -292,16 +240,6 @@ async function saveMilk() {
   }
 
   updateReceiptModal(milkData);
-
-  currentWeight = 0;
-  lastScaleWeight = 0;
-  document.getElementById("farmer-id").value = "";
-  document.getElementById("route").value = "";
-  document.getElementById("section").value = "";
-  document.getElementById("farmer-name").innerText = "";
-  document.getElementById("weight-display").innerText = "Weight: 0 Kg";
-  document.getElementById("manual-weight").value = "";
-  updateTotal();
 }
 
 // --- Sync Pending Milk Collections ---
