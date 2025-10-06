@@ -101,19 +101,28 @@ async function fetchFarmerRoute() {
         .select("route,name,farmer_id")
         .eq("farmer_id", farmerId)
         .maybeSingle();
+
       if (data) {
-        document.getElementById("route").value = data.route;
+        document.getElementById("route").value = data.route || "";
         document.getElementById("farmer-name").innerText =
           `Farmer: ${data.name} (Route: ${data.route})`;
-        db.transaction('farmers', 'readwrite').objectStore('farmers').put(data);
+
+        // ✅ Fix: ensure farmer_id exists before inserting
+        data.farmer_id = data.farmer_id || farmerId;
+
+        const tx = db.transaction("farmers", "readwrite");
+        const store = tx.objectStore("farmers");
+        store.put(data);
       } else {
         document.getElementById("route").value = "";
         document.getElementById("farmer-name").innerText = "Farmer not found!";
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
   } else {
-    const tx = db.transaction('farmers', 'readonly');
-    const store = tx.objectStore('farmers');
+    const tx = db.transaction("farmers", "readonly");
+    const store = tx.objectStore("farmers");
     const requestFarmer = store.get(farmerId);
     requestFarmer.onsuccess = function() {
       const farmer = requestFarmer.result;
@@ -128,6 +137,7 @@ async function fetchFarmerRoute() {
     };
   }
 }
+
 
 document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("farmer-id").addEventListener("change", fetchFarmerRoute);

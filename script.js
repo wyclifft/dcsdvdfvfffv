@@ -32,7 +32,6 @@ request.onupgradeneeded = function(event) {
 request.onsuccess = function(event) {
   db = event.target.result;
   console.log("IndexedDB ready ✅");
-  checkAutoLogin();
   showPendingReceipts();
   if (navigator.onLine) syncPendingMilk();
 };
@@ -76,26 +75,10 @@ async function login() {
 function setLoggedInUser(user, offline = false) {
   currentUser = user;
   localStorage.setItem("loggedInUser", JSON.stringify(user));
-  if (!offline && db) {
-    const tx = db.transaction('app_users', 'readwrite');
-    tx.objectStore('app_users').put(user);
-  }
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app-screen").style.display = "block";
   document.getElementById("user-info").innerText =
     `Logged in as ${user.user_id} (${user.role})${offline ? " [Offline]" : ""}`;
-}
-
-function checkAutoLogin() {
-  const savedUser = localStorage.getItem("loggedInUser");
-  if (savedUser) {
-    try {
-      const user = JSON.parse(savedUser);
-      setLoggedInUser(user, !navigator.onLine);
-    } catch (e) {
-      localStorage.removeItem("loggedInUser");
-    }
-  }
 }
 
 // --- Logout ---
@@ -118,19 +101,28 @@ async function fetchFarmerRoute() {
         .select("route,name,farmer_id")
         .eq("farmer_id", farmerId)
         .maybeSingle();
+
       if (data) {
-        document.getElementById("route").value = data.route;
+        document.getElementById("route").value = data.route || "";
         document.getElementById("farmer-name").innerText =
           `Farmer: ${data.name} (Route: ${data.route})`;
-        db.transaction('farmers', 'readwrite').objectStore('farmers').put(data);
+
+        // ✅ Fix: ensure farmer_id exists before inserting
+        data.farmer_id = data.farmer_id || farmerId;
+
+        const tx = db.transaction("farmers", "readwrite");
+        const store = tx.objectStore("farmers");
+        store.put(data);
       } else {
         document.getElementById("route").value = "";
         document.getElementById("farmer-name").innerText = "Farmer not found!";
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
   } else {
-    const tx = db.transaction('farmers', 'readonly');
-    const store = tx.objectStore('farmers');
+    const tx = db.transaction("farmers", "readonly");
+    const store = tx.objectStore("farmers");
     const requestFarmer = store.get(farmerId);
     requestFarmer.onsuccess = function() {
       const farmer = requestFarmer.result;
@@ -145,6 +137,7 @@ async function fetchFarmerRoute() {
     };
   }
 }
+
 
 document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("farmer-id").addEventListener("change", fetchFarmerRoute);
@@ -178,87 +171,36 @@ async function connectScale() {
   try {
     scaleDevice = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: [
-        0xFFE0, 0xFEE7, 0x1810, 0x181D, 0xFFF0,
-        '0000ffe0-0000-1000-8000-00805f9b34fb',
-        '0000fee7-0000-1000-8000-00805f9b34fb',
-        '00001810-0000-1000-8000-00805f9b34fb',
-        '0000181d-0000-1000-8000-00805f9b34fb',
-        '0000fff0-0000-1000-8000-00805f9b34fb'
-      ]
+      optionalServices: [0xFFE0, 0xFEE7]
     });
 
     const server = await scaleDevice.gatt.connect();
-    scaleType = scaleDevice.name || "Generic Scale";
+    let service;
+    try { service = await server.getPrimaryService(0xFFE0); scaleType="HC-05"; }
+    catch { service = await server.getPrimaryService(0xFEE7); scaleType="HM-10"; }
 
-    const services = await server.getPrimaryServices();
-    let foundCharacteristic = false;
+    const characteristics = await service.getCharacteristics();
+    scaleCharacteristic = characteristics[0];
+    scaleCharacteristic.addEventListener("characteristicvaluechanged", handleScaleData);
+    await scaleCharacteristic.startNotifications();
 
-    for (const service of services) {
-      try {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.notify || char.properties.indicate) {
-            scaleCharacteristic = char;
-            scaleCharacteristic.addEventListener("characteristicvaluechanged", handleScaleData);
-            await scaleCharacteristic.startNotifications();
-            foundCharacteristic = true;
-            break;
-          }
-        }
-        if (foundCharacteristic) break;
-      } catch (e) { continue; }
-    }
-
-    if (foundCharacteristic) {
-      document.getElementById("scale-status").textContent = `Scale: Connected (${scaleType}) ✅`;
-    } else {
-      document.getElementById("scale-status").textContent = "Scale: No readable characteristic found";
-    }
+    document.getElementById("scale-status").textContent = `Scale: Connected (${scaleType}) ✅`;
   } catch (err) {
     console.error(err);
     document.getElementById("scale-status").textContent = "Scale: Error / Not Connected";
   }
 }
 
-let lastScaleWeight = 0;
-
 function handleScaleData(event) {
-  const value = event.target.value;
-  let parsed = null;
-
-  const text = new TextDecoder().decode(value);
-  const textMatch = text.match(/(\d+\.?\d*)/);
-  if (textMatch) {
-    parsed = parseFloat(textMatch[1]);
-  }
-
-  if (!parsed && value.byteLength >= 2) {
-    const dataView = new DataView(value.buffer);
-    try {
-      if (value.byteLength === 2) {
-        parsed = dataView.getUint16(0, true) / 100;
-      } else if (value.byteLength === 4) {
-        parsed = dataView.getFloat32(0, true);
-      } else if (value.byteLength >= 6) {
-        for (let i = 0; i < value.byteLength - 1; i++) {
-          const weight = dataView.getUint16(i, true);
-          if (weight > 0 && weight < 50000) {
-            parsed = weight / 100;
-            break;
-          }
-        }
-      }
-    } catch (e) { }
-  }
-
-  if (parsed && !isNaN(parsed) && parsed > 0 && parsed < 1000 && Math.abs(parsed - lastScaleWeight) > 0.05) {
-    const weightDiff = parsed - lastScaleWeight;
-    if (weightDiff > 0) {
-      currentWeight += weightDiff;
-      lastScaleWeight = parsed;
+  const text = new TextDecoder().decode(event.target.value);
+  const match = text.match(/(\d+\.\d+)/);
+  if (match) {
+    const parsed = parseFloat(match[1]);
+    if (!isNaN(parsed) && Math.abs(parsed - currentWeight) > 0.05) {
+      currentWeight = parsed;
+      document.getElementById("manual-weight").value = parsed.toFixed(1);
       document.getElementById("weight-display").innerText =
-        `Weight: ${currentWeight.toFixed(1)} Kg (accumulated from scale: ${scaleType})`;
+        `Weight: ${parsed.toFixed(1)} Kg (scale: ${scaleType})`;
       updateTotal();
     }
   }
