@@ -1,4 +1,4 @@
-const CACHE_NAME = 'milk-collection-v4';
+const CACHE_NAME = 'milk-collection-v5';
 const urlsToCache = [
   '/',
   '/index.html',

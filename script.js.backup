@@ -324,85 +324,19 @@ function showPendingReceipts() {
 
 // --- Receipt Modal ---
 function updateReceiptModal(receiptData) {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toTimeString().slice(0, 8);
-  const referenceNo = `AG${dateStr.replace(/-/g, '')}${Math.floor(Math.random() * 1000)}`;
-
-  const receiptHTML = `
-    <div class="receipt-58mm">
-      <div class="receipt-header">
-        <div class="test-print">TEST PRINT</div>
-        <h2>BUURI DAIRY F.C.S LTD</h2>
-        <h3>CUSTOMER DELIVERY RECEIPT</h3>
-      </div>
-
-      <div class="receipt-info">
-        <div class="info-row">
-          <span>Member NO</span>
-          <span>${receiptData.farmer_id}</span>
-        </div>
-        <div class="info-row">
-          <span>Member Name</span>
-          <span>${receiptData.farmer_name || 'N/A'}</span>
-        </div>
-        <div class="info-row">
-          <span>Reference NO</span>
-          <span>${referenceNo}</span>
-        </div>
-        <div class="info-row">
-          <span>Date</span>
-          <span>${dateStr} ${timeStr}</span>
-        </div>
-      </div>
-
-      <div class="receipt-divider"></div>
-
-      <div class="receipt-items">
-        <div class="item-row">
-          <span>1: ${referenceNo}-1</span>
-          <span>${receiptData.weight}</span>
-        </div>
-      </div>
-
-      <div class="receipt-divider"></div>
-
-      <div class="receipt-total">
-        <span>Total Weight [Kgs]</span>
-        <span>${receiptData.weight}</span>
-      </div>
-
-      <div class="receipt-divider"></div>
-
-      <div class="receipt-footer">
-        <div class="info-row">
-          <span>Route</span>
-          <span>${receiptData.route}</span>
-        </div>
-        <div class="info-row">
-          <span>Route Name</span>
-          <span>A Main Collection</span>
-        </div>
-        <div class="info-row">
-          <span>Member Route</span>
-          <span>T018</span>
-        </div>
-        <div class="info-row">
-          <span>Clerk Name</span>
-          <span>${currentUser ? currentUser.name : receiptData.collected_by}</span>
-        </div>
-        <div class="info-row">
-          <span>Session</span>
-          <span>${receiptData.section}</span>
-        </div>
-        <div class="info-row">
-          <span>${dateStr} at ${timeStr}</span>
-        </div>
-      </div>
-    </div>
+  const receiptItems = document.getElementById("receipt-items");
+  receiptItems.innerHTML = `
+    <tr><th>Farmer</th><td>${receiptData.farmer_id}</td></tr>
+    <tr><th>Route</th><td>${receiptData.route}</td></tr>
+    <tr><th>Section</th><td>${receiptData.section}</td></tr>
+    <tr><th>Weight</th><td>${receiptData.weight} Kg</td></tr>
+    <tr><th>Rate</th><td>Ksh ${receiptData.price_per_liter}</td></tr>
+    <tr><th>Total</th><td>Ksh ${receiptData.total_amount}</td></tr>
+    <tr><th>Collector</th><td>${receiptData.collected_by}</td></tr>
+    <tr><th>Status</th><td>${receiptData.synced ? "Synced ✅" : "Pending ⚠️"}</td></tr>
   `;
-
-  document.getElementById("receipt-items").innerHTML = receiptHTML;
+  document.getElementById("receipt-subtotal").textContent = `Ksh ${receiptData.total_amount}`;
+  document.getElementById("receipt-total").textContent = `Ksh ${receiptData.total_amount}`;
   document.getElementById("receipt-modal").classList.remove("hidden");
   document.getElementById("modal-backdrop").classList.add("visible");
 }

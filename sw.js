@@ -1,16 +1,22 @@
-const CACHE_NAME = 'milk-collection-v4';
+const CACHE_NAME = 'milk-collection-v5';
 const urlsToCache = [
   '/',
   '/index.html',
   '/style.css',
   '/script.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        return cache.addAll(urlsToCache).catch(err => {
+          console.log('Cache addAll error:', err);
+        });
+      })
   );
   self.skipWaiting();
 });
@@ -31,6 +37,20 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  if (url.hostname.includes('supabase.co') || url.hostname.includes('cdn.jsdelivr.net')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return new Response(
+          JSON.stringify({ offline: true, message: 'Offline mode - data will sync when online' }),
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -38,19 +58,34 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
         return fetch(event.request).then((response) => {
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+          if (!response || response.status !== 200) {
             return response;
           }
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
+          if (event.request.method === 'GET' &&
+              (response.type === 'basic' || response.type === 'cors')) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, responseToCache);
             });
+          }
           return response;
         });
       })
       .catch(() => {
-        return caches.match('/index.html');
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
       })
   );
 });
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-milk-data') {
+    event.waitUntil(syncMilkData());
+  }
+});
+
+async function syncMilkData() {
+  console.log('Background sync triggered');
+}
