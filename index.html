@@ -62,7 +62,7 @@
         <h3>⚖️ Milk Weight</h3>
         <div class="weight-section">
           <p id="weight-display" class="weight-display">Weight: 0 Kg</p>
-          <button onclick="connectScale()" class="btn-secondary">Connect Scale</button>
+          <button id="connect-scale-btn" onclick="connectScale()" class="btn-primary">Connect Bluetooth Scale</button>
           <p id="scale-status" class="scale-status">Scale: Not Connected</p>
         </div>
         <div class="manual-weight">
@@ -102,10 +102,20 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
+  <script src="script-mobile.js"></script>
   <script>
     document.getElementById('menu-btn').addEventListener('click', toggleMenu);
     function toggleMenu() {
       document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile && typeof connectScaleMobile === 'function') {
+      const btn = document.getElementById('connect-scale-btn');
+      if (btn) {
+        btn.onclick = connectScaleMobile;
+      }
     }
 
     // Register Service Worker
