@@ -1,8 +1,8 @@
 // --- Supabase client ---
 const { createClient } = supabase;
 const client = createClient(
-  "https://ovcojxtwthzxopuddjst.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92Y29qeHR3dGh6eG9wdWRkanN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5NTM1MjIsImV4cCI6MjA3MzUyOTUyMn0.c6EknOyljCCdRd5rO0Ff6tEnPS9NXjhWpnjiyG4WvIY"
+  "https://nzwmiuntcrjntnopargu.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56d21pdW50Y3JqbnRub3Bhcmd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3OTQ0NjcsImV4cCI6MjA3NTM3MDQ2N30.SRNF3UcUeuwgxzKu3JP0zsJzJD77LkQyJG5hm0iDlGQ"
 );
 
 let currentUser = null;
