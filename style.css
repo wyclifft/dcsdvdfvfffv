@@ -313,64 +313,6 @@ input:focus, select:focus {
   }
 }
 
-/* Autocomplete Styles */
-.autocomplete-wrapper {
-  position: relative;
-  width: 100%;
-  margin-bottom: 0.5rem;
-}
-
-.suggestions-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: white;
-  border: 1px solid #ddd;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  display: none;
-  z-index: 1000;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-.suggestions-dropdown.show {
-  display: block;
-}
-
-.suggestion-item {
-  padding: 0.75rem;
-  cursor: pointer;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background 0.2s;
-}
-
-.suggestion-item:hover {
-  background: #f3f4f6;
-}
-
-.suggestion-item:last-child {
-  border-bottom: none;
-}
-
-.suggestion-item .farmer-id {
-  font-weight: 600;
-  color: #667eea;
-}
-
-.suggestion-item .farmer-name {
-  color: #333;
-  font-size: 0.95rem;
-}
-
-.suggestion-item .farmer-route {
-  color: #666;
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
-}
-
 @media (max-width: 640px) {
   .container {
     padding: 0.75rem;
@@ -378,4 +320,63 @@ input:focus, select:focus {
   .card {
     padding: 1rem;
   }
+}
+
+
+/* === Autocomplete Dropdown Styling === */
+.autocomplete-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+#farmer-search {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1.5px solid #ccc;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#farmer-search:focus {
+  border-color: #007bff;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-top: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-item {
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.suggestion-item:hover {
+  background: #007bff;
+  color: white;
+}
+
+.suggestions-dropdown p {
+  padding: 10px;
+  color: #666;
+  text-align: center;
+}
+
+#farmer-suggestions,
+.suggestions-dropdown {
+  position: absolute !important;
+  z-index: 9999 !important;
 }

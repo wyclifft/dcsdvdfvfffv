@@ -321,3 +321,62 @@ input:focus, select:focus {
     padding: 1rem;
   }
 }
+
+
+/* === Autocomplete Dropdown Styling === */
+.autocomplete-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+#farmer-search {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1.5px solid #ccc;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#farmer-search:focus {
+  border-color: #007bff;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-top: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-item {
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.suggestion-item:hover {
+  background: #007bff;
+  color: white;
+}
+
+.suggestions-dropdown p {
+  padding: 10px;
+  color: #666;
+  text-align: center;
+}
+
+#farmer-suggestions,
+.suggestions-dropdown {
+  position: absolute !important;
+  z-index: 9999 !important;
+}

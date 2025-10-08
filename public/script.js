@@ -12,7 +12,7 @@ let currentWeight = 0;
 let db;
 const request = indexedDB.open("milkCollectionDB", 1);
 
-request.onupgradeneeded = function(event) {
+request.onupgradeneeded = function (event) {
   db = event.target.result;
 
   if (!db.objectStoreNames.contains("receipts")) {
@@ -29,16 +29,124 @@ request.onupgradeneeded = function(event) {
   }
 };
 
-request.onsuccess = function(event) {
+request.onsuccess = function (event) {
   db = event.target.result;
   console.log("IndexedDB ready ✅");
   showPendingReceipts();
-  if (navigator.onLine) syncPendingMilk();
+  if (navigator.onLine) {
+    syncPendingMilk();
+    syncFarmersToLocal();
+  }
+  subscribeToFarmerUpdates();
 };
 
-request.onerror = function(event) {
+request.onerror = function (event) {
   console.error("IndexedDB error:", event.target.errorCode);
 };
+
+// --- Farmer Search and Autocomplete (Online + Offline) ---
+const farmerSearchInput = document.getElementById("farmer-search");
+const farmerSuggestions = document.getElementById("farmer-suggestions");
+
+farmerSearchInput.addEventListener("input", async () => {
+  const query = farmerSearchInput.value.trim().toLowerCase();
+  farmerSuggestions.innerHTML = "";
+  if (query.length < 2) return;
+
+  if (navigator.onLine) {
+    // --- Online search from Supabase ---
+    try {
+      const { data, error } = await client
+        .from("farmers")
+        .select("farmer_id, name, route")
+        .or(`farmer_id.ilike.%${query}%,name.ilike.%${query}%`)
+        .limit(10);
+
+      if (error) throw error;
+      displayFarmerSuggestions(data);
+    } catch (err) {
+      console.error("Farmer search error:", err);
+    }
+  } else {
+    // --- Offline search from IndexedDB ---
+    const tx = db.transaction("farmers", "readonly");
+    const store = tx.objectStore("farmers");
+    const req = store.getAll();
+    req.onsuccess = function () {
+      const farmers = req.result.filter(
+        (f) =>
+          f.farmer_id.toLowerCase().includes(query) ||
+          f.name.toLowerCase().includes(query)
+      );
+      displayFarmerSuggestions(farmers);
+    };
+  }
+});
+
+function displayFarmerSuggestions(farmers) {
+  farmerSuggestions.innerHTML = "";
+  farmers.forEach((f) => {
+    const div = document.createElement("div");
+    div.classList.add("suggestion-item");
+    div.textContent = `${f.name} (${f.farmer_id}) - ${f.route}`;
+    div.onclick = () => selectFarmer(f);
+    farmerSuggestions.appendChild(div);
+  });
+}
+
+function selectFarmer(farmer) {
+  document.getElementById("farmer-id").value = farmer.farmer_id;
+  document.getElementById("farmer-name-display").value = farmer.name;
+  document.getElementById("route").value = farmer.route;
+  farmerSearchInput.value = `${farmer.name}`;
+  farmerSuggestions.innerHTML = "";
+  console.log("✅ Farmer selected:", farmer.name);
+}
+
+// --- Sync all farmers to local DB ---
+async function syncFarmersToLocal() {
+  try {
+    console.log("🔁 Syncing farmers...");
+    const { data, error } = await client.from("farmers").select("*");
+    if (error) throw error;
+
+    const tx = db.transaction("farmers", "readwrite");
+    const store = tx.objectStore("farmers");
+    data.forEach((f) => store.put(f));
+    console.log(`✅ Synced ${data.length} farmers locally`);
+  } catch (err) {
+    console.error("Farmer sync error:", err);
+  }
+}
+
+window.addEventListener("online", syncFarmersToLocal);
+
+// --- Realtime farmer updates ---
+function subscribeToFarmerUpdates() {
+  if (!client || !client.channel) return;
+  console.log("📡 Listening for farmer table changes...");
+
+  client
+    .channel("farmers-changes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "farmers" },
+      (payload) => {
+        const farmer = payload.new || payload.old;
+        if (farmer && db) {
+          const tx = db.transaction("farmers", "readwrite");
+          const store = tx.objectStore("farmers");
+          if (payload.eventType === "DELETE") {
+            store.delete(farmer.farmer_id);
+          } else {
+            store.put(farmer);
+          }
+          console.log(`✅ Local farmers updated (${payload.eventType}): ${farmer.name}`);
+        }
+      }
+    )
+    .subscribe();
+}
 
 // --- Login (online/offline) ---
 async function login() {
@@ -61,10 +169,10 @@ async function login() {
       alert("Login failed (online)");
     }
   } else {
-    const tx = db.transaction('app_users', 'readonly');
-    const store = tx.objectStore('app_users');
+    const tx = db.transaction("app_users", "readonly");
+    const store = tx.objectStore("app_users");
     const requestUser = store.get(userId);
-    requestUser.onsuccess = function() {
+    requestUser.onsuccess = function () {
       const user = requestUser.result;
       if (user && user.password === password) setLoggedInUser(user, true);
       else alert("Invalid credentials (offline)");
@@ -77,11 +185,13 @@ function setLoggedInUser(user, offline = false) {
   localStorage.setItem("loggedInUser", JSON.stringify(user));
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app-screen").style.display = "block";
-  document.getElementById("user-info").innerText =
-    `Logged in as ${user.user_id} (${user.role})${offline ? " [Offline]" : ""}`;
+  document.getElementById(
+    "user-info"
+  ).innerText = `Logged in as ${user.user_id} (${user.role})${
+    offline ? " [Offline]" : ""
+  }`;
 }
 
-// --- Logout ---
 function logout() {
   currentUser = null;
   localStorage.removeItem("loggedInUser");
@@ -89,105 +199,114 @@ function logout() {
   document.getElementById("app-screen").style.display = "none";
 }
 
-// --- Farmer Lookup ---
+// --- Fetch farmer details automatically ---
 async function fetchFarmerRoute() {
   const farmerId = document.getElementById("farmer-id").value.trim();
   if (!farmerId) return;
 
   if (navigator.onLine) {
-    try {
-      const { data } = await client
-        .from("farmers")
-        .select("route,name,farmer_id")
-        .eq("farmer_id", farmerId)
-        .maybeSingle();
+    const { data, error } = await client
+      .from("farmers")
+      .select("farmer_id, name, route")
+      .eq("farmer_id", farmerId)
+      .maybeSingle();
 
-      if (data) {
-        document.getElementById("route").value = data.route || "";
-        document.getElementById("farmer-name").innerText =
-          `Farmer: ${data.name} (Route: ${data.route})`;
+    if (error) return console.error("Fetch error:", error);
 
-        // ✅ Fix: ensure farmer_id exists before inserting
-        data.farmer_id = data.farmer_id || farmerId;
+    if (data) {
+      document.getElementById("farmer-id").value = data.farmer_id;
+      document.getElementById("farmer-name-display").value = data.name;
+      document.getElementById("route").value = data.route;
 
-        const tx = db.transaction("farmers", "readwrite");
-        const store = tx.objectStore("farmers");
-        store.put(data);
-      } else {
-        document.getElementById("route").value = "";
-        document.getElementById("farmer-name").innerText = "Farmer not found!";
-      }
-    } catch (err) {
-      console.error("Fetch error:", err);
+      const tx = db.transaction("farmers", "readwrite");
+      tx.objectStore("farmers").put(data);
     }
   } else {
     const tx = db.transaction("farmers", "readonly");
     const store = tx.objectStore("farmers");
-    const requestFarmer = store.get(farmerId);
-    requestFarmer.onsuccess = function() {
-      const farmer = requestFarmer.result;
+    const req = store.get(farmerId);
+    req.onsuccess = () => {
+      const farmer = req.result;
       if (farmer) {
+        document.getElementById("farmer-name-display").value = farmer.name;
         document.getElementById("route").value = farmer.route;
-        document.getElementById("farmer-name").innerText =
-          `Farmer: ${farmer.name} (Route: ${farmer.route}) [Offline]`;
-      } else {
-        document.getElementById("route").value = "";
-        document.getElementById("farmer-name").innerText = "Farmer not found (offline)";
       }
     };
   }
 }
 
-
-document.addEventListener("DOMContentLoaded", function() {
-  document.getElementById("farmer-id").addEventListener("change", fetchFarmerRoute);
-  document.getElementById("price-per-liter").addEventListener("input", updateTotal);
+// --- DOM bindings ---
+document.addEventListener("DOMContentLoaded", function () {
+  document
+    .getElementById("farmer-id")
+    .addEventListener("change", fetchFarmerRoute);
+  document
+    .getElementById("price-per-liter")
+    .addEventListener("input", updateTotal);
   document.getElementById("print-receipt-btn").onclick = printReceipt;
   document.getElementById("close-receipt-btn").onclick = closeReceipt;
-  document.getElementById("modal-backdrop").addEventListener("click", closeReceipt);
+  document
+    .getElementById("modal-backdrop")
+    .addEventListener("click", closeReceipt);
 });
 
 // --- Weight Handling ---
 function updateTotal() {
   const price = parseFloat(document.getElementById("price-per-liter").value) || 0;
   const total = currentWeight * price;
-  document.getElementById("total-amount").innerText = `Total: ${total.toFixed(2)} Ksh`;
+  document.getElementById(
+    "total-amount"
+  ).innerText = `Total: ${total.toFixed(2)} Ksh`;
 }
 
 function useManualWeight() {
   const manual = parseFloat(document.getElementById("manual-weight").value);
   if (!isNaN(manual) && manual > 0) {
     currentWeight = manual;
-    document.getElementById("weight-display").innerText =
-      `Weight: ${manual.toFixed(1)} Kg (manual)`;
+    document.getElementById(
+      "weight-display"
+    ).innerText = `Weight: ${manual.toFixed(1)} Kg (manual)`;
     updateTotal();
   } else alert("Enter valid weight");
 }
 
 // --- Bluetooth Scale ---
-let scaleDevice, scaleCharacteristic, scaleType = "Unknown";
+let scaleDevice,
+  scaleCharacteristic,
+  scaleType = "Unknown";
 
 async function connectScale() {
   try {
     scaleDevice = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: [0xFFE0, 0xFEE7]
+      optionalServices: [0xFFE0, 0xFEE7],
     });
 
     const server = await scaleDevice.gatt.connect();
     let service;
-    try { service = await server.getPrimaryService(0xFFE0); scaleType="HC-05"; }
-    catch { service = await server.getPrimaryService(0xFEE7); scaleType="HM-10"; }
+    try {
+      service = await server.getPrimaryService(0xFFE0);
+      scaleType = "HC-05";
+    } catch {
+      service = await server.getPrimaryService(0xFEE7);
+      scaleType = "HM-10";
+    }
 
     const characteristics = await service.getCharacteristics();
     scaleCharacteristic = characteristics[0];
-    scaleCharacteristic.addEventListener("characteristicvaluechanged", handleScaleData);
+    scaleCharacteristic.addEventListener(
+      "characteristicvaluechanged",
+      handleScaleData
+    );
     await scaleCharacteristic.startNotifications();
 
-    document.getElementById("scale-status").textContent = `Scale: Connected (${scaleType}) ✅`;
+    document.getElementById(
+      "scale-status"
+    ).textContent = `Scale: Connected (${scaleType}) ✅`;
   } catch (err) {
     console.error(err);
-    document.getElementById("scale-status").textContent = "Scale: Error / Not Connected";
+    document.getElementById("scale-status").textContent =
+      "Scale: Error / Not Connected";
   }
 }
 
@@ -199,8 +318,9 @@ function handleScaleData(event) {
     if (!isNaN(parsed) && Math.abs(parsed - currentWeight) > 0.05) {
       currentWeight = parsed;
       document.getElementById("manual-weight").value = parsed.toFixed(1);
-      document.getElementById("weight-display").innerText =
-        `Weight: ${parsed.toFixed(1)} Kg (scale: ${scaleType})`;
+      document.getElementById(
+        "weight-display"
+      ).innerText = `Weight: ${parsed.toFixed(1)} Kg (scale: ${scaleType})`;
       updateTotal();
     }
   }
@@ -229,7 +349,7 @@ async function saveMilk() {
     total_amount: parseFloat(total.toFixed(2)),
     collection_date: new Date(),
     orderId,
-    synced: false
+    synced: false,
   };
 
   if (db) {
@@ -240,13 +360,17 @@ async function saveMilk() {
 
   if (navigator.onLine) {
     try {
-      const { data, error } = await client.from("milk_collection").insert([milkData]);
+      const { data, error } = await client
+        .from("milk_collection")
+        .insert([milkData]);
       if (!error && db) {
         const txUpdate = db.transaction("receipts", "readwrite");
-        txUpdate.objectStore("receipts").put({...milkData, synced: true});
+        txUpdate.objectStore("receipts").put({ ...milkData, synced: true });
         txUpdate.oncomplete = () => showPendingReceipts();
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   updateReceiptModal(milkData);
@@ -262,7 +386,7 @@ async function syncPendingMilk() {
   const request = index.getAll();
 
   request.onsuccess = async () => {
-    const unsynced = request.result.filter(r => !r.synced);
+    const unsynced = request.result.filter((r) => !r.synced);
 
     for (const r of unsynced) {
       const milkData = {
@@ -273,23 +397,28 @@ async function syncPendingMilk() {
         collected_by: r.collected_by,
         price_per_liter: r.price_per_liter,
         total_amount: r.total_amount,
-        collection_date: r.collection_date
+        collection_date: r.collection_date,
       };
 
       try {
-        const { error } = await client.from("milk_collection").insert([milkData]);
+        const { error } = await client
+          .from("milk_collection")
+          .insert([milkData]);
         if (!error) {
           const txUpdate = db.transaction("receipts", "readwrite");
-          txUpdate.objectStore("receipts").put({...r, synced:true});
+          txUpdate.objectStore("receipts").put({ ...r, synced: true });
           console.log(`Receipt for ${r.farmer_id} synced ✅`);
         }
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     showPendingReceipts();
   };
 
-  request.onerror = (event) => console.error("Error syncing receipts:", event.target.error);
+  request.onerror = (event) =>
+    console.error("Error syncing receipts:", event.target.error);
 }
 
 window.addEventListener("online", () => {
@@ -311,15 +440,16 @@ function showPendingReceipts() {
 
   request.onsuccess = () => {
     request.result
-      .filter(r => !r.synced)
-      .forEach(r => {
+      .filter((r) => !r.synced)
+      .forEach((r) => {
         const li = document.createElement("li");
         li.textContent = `Farmer: ${r.farmer_id} (${r.total_amount} Ksh) ⚠️ Pending Sync`;
         list.appendChild(li);
       });
   };
 
-  request.onerror = (event) => console.error("Error loading pending receipts:", event.target.error);
+  request.onerror = (event) =>
+    console.error("Error loading pending receipts:", event.target.error);
 }
 
 // --- Receipt Modal ---
