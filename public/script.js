@@ -154,31 +154,64 @@ async function login() {
   const password = document.getElementById("password").value.trim();
   if (!userId || !password) return alert("Enter credentials");
 
+  if (!db) {
+    alert("Local database not ready yet. Please wait a second and try again.");
+    return;
+  }
+
   if (navigator.onLine) {
     try {
-      const { data } = await client
+      const { data, error } = await client
         .from("app_users")
         .select("*")
         .eq("user_id", userId)
         .eq("password", password)
         .maybeSingle();
-      if (data) setLoggedInUser(data);
-      else alert("Invalid credentials");
+
+      if (error) throw error;
+
+      if (data) {
+        // ✅ Save user for offline login
+        const tx = db.transaction("app_users", "readwrite");
+        const store = tx.objectStore("app_users");
+        store.put({ ...data, password }); // ensure password is saved
+        tx.oncomplete = () => console.log(`✅ User ${userId} saved locally`);
+
+        setLoggedInUser(data);
+      } else {
+        alert("Invalid credentials");
+      }
     } catch (err) {
       console.error("Login error", err);
       alert("Login failed (online)");
     }
   } else {
-    const tx = db.transaction("app_users", "readonly");
-    const store = tx.objectStore("app_users");
-    const requestUser = store.get(userId);
-    requestUser.onsuccess = function () {
-      const user = requestUser.result;
-      if (user && user.password === password) setLoggedInUser(user, true);
-      else alert("Invalid credentials (offline)");
-    };
+    console.log("🔒 Offline login attempt...");
+    try {
+      const tx = db.transaction("app_users", "readonly");
+      const store = tx.objectStore("app_users");
+      const req = store.get(userId);
+      req.onsuccess = () => {
+        const user = req.result;
+        if (!user) return alert("No saved user found for offline login.");
+        if (user.password === password) {
+          console.log("✅ Offline login success:", user.user_id);
+          setLoggedInUser(user, true);
+        } else {
+          alert("Invalid credentials (offline)");
+        }
+      };
+      req.onerror = (e) => {
+        console.error("Offline login error:", e);
+        alert("Offline login failed");
+      };
+    } catch (err) {
+      console.error("Offline login error:", err);
+      alert("Offline login failed");
+    }
   }
 }
+
 
 function setLoggedInUser(user, offline = false) {
   currentUser = user;
